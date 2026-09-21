@@ -686,7 +686,7 @@ function renderQuiz(){
   } else {
     var inp = document.getElementById("typed");
     document.getElementById("checkBtn").onclick = function(){ answerOpen(); };
-    inp.addEventListener("keydown", function(ev){ if(ev.key === "Enter"){ ev.preventDefault(); state.answered ? next() : answerOpen(); } });
+    inp.addEventListener("keydown", function(ev){ if(ev.key === "Enter"){ ev.preventDefault(); answerOpen(); } });
     inp.focus();
   }
   renderRail();
@@ -703,10 +703,8 @@ function feedback(verdict, note){
   document.getElementById("fb").innerHTML = '<div class="fb">'+head+
     (note ? '<div class="def" style="color:var(--ink-2);font-size:14px">'+note+'</div>' : "")+
     entryCard(e)+
-    '<div class="fbrow"><button class="btn primary" id="nextBtn">'+(last ? "Eredmény" : "Következő")+'</button>'+
-    '<span class="kbd">Enter</span></div></div>';
+    '<div class="fbrow"><button class="btn primary" id="nextBtn">'+(last ? "Eredmény" : "Következő")+'</button></div></div>';
   document.getElementById("nextBtn").onclick = next;
-  document.getElementById("nextBtn").focus();
 }
 function answerMC(ix){
   if(state.answered) return;
@@ -1009,7 +1007,7 @@ function renderVTest(){
   var inp = document.getElementById("vtIn");
   document.getElementById("vtCheck").onclick = vtAnswer;
   document.getElementById("vtSkip").onclick = vtSkip;
-  inp.addEventListener("keydown", function(ev){ if(ev.key === "Enter"){ ev.preventDefault(); v.answered ? vtNext() : vtAnswer(); } });
+  inp.addEventListener("keydown", function(ev){ if(ev.key === "Enter"){ ev.preventDefault(); if(!v.answered) vtAnswer(); } });
   inp.focus();
   var hb = document.getElementById("vtHint"), hbox = document.getElementById("vtHintBox");
   hb.onclick = function(){
@@ -1047,12 +1045,10 @@ function vtAnswer(skipped){
   document.getElementById("vtFb").innerHTML = '<div class="fb">'+head+
     (note ? '<div class="def" style="color:var(--ink-2);font-size:14px">'+note+'</div>' : "")+
     entryCard(e)+
-    '<div class="fbrow"><button class="btn primary" id="vtNext">'+(last ? "Eredmény" : "Következő")+'</button>'+
-    '<span class="kbd">Enter</span></div></div>';
+    '<div class="fbrow"><button class="btn primary" id="vtNext">'+(last ? "Eredmény" : "Következő")+'</button></div></div>';
   var tal2 = document.querySelector(".tally");
   if(tal2) tal2.innerHTML = '<span class="g">'+v.correct+' ✓</span> &nbsp;<span class="r">'+v.wrong.length+' ✗</span>';
   document.getElementById("vtNext").onclick = vtNext;
-  document.getElementById("vtNext").focus();
   wirePops();
 }
 function vtNext(){
@@ -1273,17 +1269,14 @@ document.getElementById("restart").onclick = function(){ state.onlyHard = false;
 document.addEventListener("keydown", function(ev){
   if(state.mode === "vtest"){
     var v = state.vt;
-    if(ev.key === "Enter" && v && !v.done){
-      ev.preventDefault();
-      if(v.answered) vtNext(); else vtAnswer();
-    }
+    if(ev.key === "Enter" && v && !v.done && !v.answered){ ev.preventDefault(); vtAnswer(); }
     return;
   }
   if(state.mode !== "quiz" || state.done) return;
   var tag = (ev.target.tagName || "").toLowerCase();
   var q = state.queue[state.i];
   if(ev.key === "Enter"){
-    if(state.answered){ ev.preventDefault(); next(); return; }
+    if(state.answered) return;
     if(q && q.kind === "open"){ ev.preventDefault(); answerOpen(); return; }
   }
   if(tag === "input") return;
