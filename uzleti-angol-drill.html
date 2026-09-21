@@ -200,6 +200,21 @@ h1,h2,h3{margin:0;text-wrap:balance}
 .miss b{font-family:var(--display);font-weight:700}
 .miss span{color:var(--ink-2);text-align:right}
 
+/* ---------- daily dose ---------- */
+.dgrid{display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:10px;margin:18px 0 6px}
+.dstat{background:var(--surface-2);border:1px solid var(--line);border-radius:var(--r);padding:13px 15px}
+.dstat .v{font-family:var(--display);font-size:27px;font-weight:700;letter-spacing:-.02em;line-height:1.1;font-variant-numeric:tabular-nums}
+.dstat .k{font-family:var(--mono);font-size:10px;letter-spacing:.11em;text-transform:uppercase;color:var(--ink-3);margin-top:3px}
+.dstat.due .v{color:var(--accent-ink)} .dstat.fresh .v{color:var(--t5)} .dstat.streak .v{color:var(--t1)}
+.dbar{height:9px;border-radius:99px;background:var(--surface-3);border:1px solid var(--line-2);overflow:hidden;margin-top:6px}
+.dbar i{display:block;height:100%;background:var(--ok)}
+.boxes{display:flex;gap:4px;align-items:stretch;height:70px;margin-top:22px}
+.boxes .b{flex:1;background:var(--surface-3);border:1px solid var(--line-2);border-radius:5px 5px 0 0;position:relative;display:flex;flex-direction:column;justify-content:flex-end}
+.boxes .b i{display:block;width:100%;background:var(--accent);border-radius:4px 4px 0 0;min-height:2px}
+.boxes .b span{position:absolute;top:-17px;left:0;right:0;text-align:center;font-family:var(--mono);font-size:10px;color:var(--ink-3)}
+.boxlbl{display:flex;gap:4px;margin-top:5px}
+.boxlbl span{flex:1;text-align:center;font-family:var(--mono);font-size:9.5px;letter-spacing:.06em;color:var(--ink-3)}
+
 /* ---------- word list ---------- */
 .wlist{border:1px solid var(--line);border-radius:var(--r);overflow:hidden;background:var(--surface);box-shadow:var(--shadow-sm)}
 .wrow{display:grid;grid-template-columns:minmax(200px,1fr) minmax(200px,1.15fr);gap:18px;align-items:baseline;
@@ -339,7 +354,8 @@ h2.sec{font-family:var(--display);font-size:19px;font-weight:600;margin-bottom:1
       <p id="brandsub">Lecture notes · 479 szócikk</p>
     </div>
     <nav class="nav" id="nav">
-      <button data-mode="quiz" aria-current="true">Gyakorlás <span class="n" id="navq"></span></button>
+      <button data-mode="daily" aria-current="true">Mai adag <span class="n" id="navd"></span></button>
+      <button data-mode="quiz">Gyakorlás <span class="n" id="navq"></span></button>
       <button data-mode="cards">Szókincs kártyák <span class="n" id="navc"></span></button>
       <button data-mode="vocab">Szókincs <span class="n" id="navv"></span></button>
       <button data-mode="notes">Leírások <span class="n" id="navn"></span></button>
@@ -395,14 +411,14 @@ var TNAME = {}; TOPICS.forEach(function(t){ TNAME[t.id] = t.hu; });
 var LS = "bizeng.v1";
 
 /* ---------- persisted state ---------- */
-var store = { stats:{}, settings:{ topics:[1,2,3,4,5], kind:"mix", src:"mix", len:20 } };
+var store = { stats:{}, settings:{ topics:[1,2,3,4,5], kind:"mix", src:"mix", len:20, newPerDay:10, dailyMax:30 } };
 try{ var raw = localStorage.getItem(LS); if(raw){ var p = JSON.parse(raw);
   if(p.stats) store.stats = p.stats;
   if(p.settings) for(var k in p.settings) store.settings[k] = p.settings[k];
 } }catch(e){}
 function save(){ try{ localStorage.setItem(LS, JSON.stringify(store)); }catch(e){} }
 
-var state = { mode:"quiz", queue:[], i:0, answered:false, correct:0, wrong:[], done:false, onlyHard:false, query:"", sort:"az", vview:"cards", hints:0, notesTopic:0, notesAllHu:false, cardMode:"def", cardN:6, board:null, vt:null, vtDir:"hu2en", vtN:20 };
+var state = { mode:"daily", dailyRun:false, queue:[], i:0, answered:false, correct:0, wrong:[], done:false, onlyHard:false, query:"", sort:"az", vview:"cards", hints:0, notesTopic:0, notesAllHu:false, cardMode:"def", cardN:6, board:null, vt:null, vtDir:"hu2en", vtN:20 };
 
 /* ---------- helpers ---------- */
 function esc(s){ return String(s).replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;").replace(/"/g,"&quot;"); }
@@ -466,10 +482,77 @@ function checkTypedHu(txt, e){
   return "no";
 }
 function stat(id){ return store.stats[id] || {ok:0,bad:0}; }
+var BOX_DAYS = [0, 1, 3, 7, 16, 35, 90];
+var DAY_MS = 86400000;
+function today(){ var d = new Date(); return d.getFullYear()+"-"+(d.getMonth()+1)+"-"+d.getDate(); }
+function endOfDay(){ var d = new Date(); d.setHours(23,59,59,999); return d.getTime(); }
+function schedOf(st){
+  if(!st) return null;
+  if(typeof st.box === "number") return st;
+  st.box = (st.ok > st.bad && st.ok > 0) ? 1 : 0;
+  st.due = st.t || Date.now();
+  return st;
+}
+function dueAt(box){
+  return box <= 0 ? Date.now() + 10*60000 : Date.now() + BOX_DAYS[Math.min(box, BOX_DAYS.length-1)] * DAY_MS;
+}
+function rollDay(){
+  if(!store.day || store.day.date !== today()) store.day = { date: today(), done: 0, fresh: 0 };
+  if(!store.streak) store.streak = { last: "", count: 0 };
+}
+function markStudied(){
+  rollDay();
+  var t = today();
+  if(store.streak.last !== t){
+    var y = new Date(); y.setDate(y.getDate()-1);
+    var yst = y.getFullYear()+"-"+(y.getMonth()+1)+"-"+y.getDate();
+    store.streak.count = (store.streak.last === yst) ? store.streak.count + 1 : 1;
+    store.streak.last = t;
+  }
+}
 function record(id, good){
-  var s = store.stats[id] || {ok:0,bad:0};
+  rollDay();
+  var isNew = !store.stats[id];
+  var s = store.stats[id] || {ok:0,bad:0,box:0,due:0};
+  schedOf(s);
   if(good) s.ok++; else s.bad++;
-  s.t = Date.now(); store.stats[id] = s; save();
+  s.box = good ? Math.min(s.box + 1, BOX_DAYS.length - 1) : Math.max(0, s.box - 2);
+  s.due = dueAt(s.box);
+  s.t = Date.now(); store.stats[id] = s;
+  if(isNew) store.day.fresh++;
+  store.day.done++;
+  markStudied();
+  save();
+}
+function dueCount(){
+  rollDay();
+  var end = endOfDay(), n = 0;
+  pool().forEach(function(e){
+    var sc = schedOf(store.stats[e.id]);
+    if(sc && sc.due <= end) n++;
+  });
+  return n;
+}
+function dailyPlan(){
+  rollDay();
+  var end = endOfDay(), due = [], fresh = [];
+  pool().forEach(function(e){
+    var sc = schedOf(store.stats[e.id]);
+    if(!sc){ fresh.push(e); return; }
+    if(sc.due <= end) due.push(e);
+  });
+  due.sort(function(a,b){ return schedOf(store.stats[a.id]).due - schedOf(store.stats[b.id]).due; });
+  var left = Math.max(0, store.settings.newPerDay - store.day.fresh);
+  return { due: due, fresh: shuffle(fresh).slice(0, left), freshLeft: left, allFresh: fresh.length };
+}
+function boxSpread(){
+  var out = [0,0,0,0,0,0,0], seen = 0;
+  pool().forEach(function(e){
+    var sc = schedOf(store.stats[e.id]);
+    if(!sc) return;
+    seen++; out[Math.min(sc.box, 6)]++;
+  });
+  return { boxes: out, seen: seen };
 }
 function pool(){
   var ts = store.settings.topics;
@@ -547,10 +630,12 @@ function renderRail(){
   document.getElementById("navq").textContent = state.queue.length ? (Math.min(state.i+1, state.queue.length) + "/" + state.queue.length) : "";
   document.getElementById("navv").textContent = ENTRIES.length;
   document.getElementById("navc").textContent = "";
+  var dn = dueCount();
+  document.getElementById("navd").textContent = dn ? dn + " ismétlés" : "kész";
   document.getElementById("navn").textContent = TOPICS.length + " téma";
   var practiced = Object.keys(store.stats).length;
   document.getElementById("navs").textContent = practiced ? practiced + " szó" : "";
-  var navMode = state.mode === "vtest" ? "vocab" : state.mode;
+  var navMode = state.mode === "vtest" ? "vocab" : (state.mode === "quiz" && state.dailyRun ? "daily" : state.mode);
   document.getElementById("nav").querySelectorAll("button").forEach(function(b){
     b.setAttribute("aria-current", String(b.dataset.mode === navMode));
   });
@@ -766,6 +851,11 @@ function next(){
 function renderResult(){
   var total = state.queue.length, pc = Math.round(state.correct/total*100);
   var verdictTxt = pc >= 90 ? "Ez már vizsgaszint." : pc >= 70 ? "Jó irány — a hibás szavakat érdemes átnézni." : "Ismételd át a kiesett szavakat, majd futtasd újra.";
+  if(state.dailyRun){
+    var left = dueCount();
+    verdictTxt = left ? "A mai adag ebből a köréből kész. Még " + left + " szó esedékes ma." :
+      "Mai adag kész" + (store.streak.count > 1 ? " — " + store.streak.count + " napos sorozat." : ".") + " A hibás szavak hamarosan visszajönnek.";
+  }
   var html = '<div class="card" style="--topic:var(--accent)">'+
     '<div class="qlead">Kör vége</div>'+
     '<div class="score"><span class="big">'+state.correct+'</span><span class="of">/ '+total+' &nbsp;·&nbsp; '+pc+'%</span></div>'+
@@ -779,11 +869,14 @@ function renderResult(){
     html += '</div>';
   }
   html += '<div class="fbrow" style="margin-top:22px">'+
-    '<button class="btn primary" id="again">Új kör</button>'+
+    (state.dailyRun ? '<button class="btn primary" id="dBack">Vissza a mai adaghoz</button>' : "")+
+    '<button class="btn'+(state.dailyRun ? "" : " primary")+'" id="again">Új kör</button>'+
     (state.wrong.length ? '<button class="btn" id="retry">Csak a kiesettekkel</button>' : "")+
     '<button class="btn ghost" id="toVocab">Szókincs megnyitása</button></div></div>';
   document.getElementById("main").innerHTML = html;
-  document.getElementById("again").onclick = function(){ newRound(false); };
+  var db = document.getElementById("dBack");
+  if(db) db.onclick = function(){ state.dailyRun = false; state.mode = "daily"; render(); };
+  document.getElementById("again").onclick = function(){ state.dailyRun = false; newRound(false); };
   var r = document.getElementById("retry");
   if(r) r.onclick = function(){
     var p = pool();
@@ -905,6 +998,8 @@ function renderStats(){
     '<div class="tile"><div class="v">'+pc+'%</div><div class="k">Találati arány</div></div>'+
     '<div class="tile"><div class="v">'+mastered+'</div><div class="k">Ül a fejben</div></div>'+
     '<div class="tile"><div class="v">'+hard.length+'</div><div class="k">Még nehéz</div></div>'+
+    '<div class="tile"><div class="v">'+dueCount()+'</div><div class="k">Ma esedékes</div></div>'+
+    '<div class="tile"><div class="v">'+((store.streak&&store.streak.count)||0)+'</div><div class="k">Napos sorozat</div></div>'+
   '</div>';
   html += '<div class="panel"><h2 class="sec">Témakörök szerint</h2><div class="brows">';
   TOPICS.forEach(function(t){
@@ -943,6 +1038,71 @@ function renderStats(){
       var e = ENTRIES[+b.dataset.id];
       state.mode = "vocab"; state.query = e.term; render();
     };
+  });
+  renderRail();
+}
+
+/* ---------- rendering: mai adag ---------- */
+function startDaily(){
+  var plan = dailyPlan();
+  var items = plan.due.concat(plan.fresh).slice(0, store.settings.dailyMax);
+  if(!items.length) return;
+  var p = pool();
+  state.queue = items.map(function(e){ return makeQ(e, p.length ? p : ENTRIES); });
+  state.i = 0; state.answered = false; state.correct = 0; state.wrong = []; state.done = false; state.hints = 0;
+  state.dailyRun = true; state.mode = "quiz";
+  render();
+}
+function renderDaily(){
+  rollDay();
+  var plan = dailyPlan(), sp = boxSpread();
+  var total = pool().length;
+  var todo = Math.min(plan.due.length + plan.fresh.length, store.settings.dailyMax);
+  var mastered = sp.boxes.slice(4).reduce(function(a,b){ return a+b; }, 0);
+  var html = '<div class="card" style="--topic:var(--accent)">'+
+    '<div class="meta"><span class="tag">napi ismétlés</span>'+
+    '<span class="tag kind">'+store.day.done+' válasz ma</span>'+
+    (store.streak.count > 1 ? '<span class="tag">'+store.streak.count+' napos sorozat</span>' : "")+'</div>'+
+    '<div class="qlead">Mai adag</div>'+
+    '<div class="stem" style="font-size:20px">'+
+      (todo ? 'Ma <b>'+plan.due.length+'</b> ismétlés esedékes'+(plan.fresh.length ? ' és <b>'+plan.fresh.length+'</b> új szó jön' : '')+'.'
+            : (plan.allFresh ? 'Mára nincs esedékes ismétlés. Ha szeretnél, holnapra is előrehozhatsz új szavakat a napi keret emelésével.'
+                             : 'Mindent átvettél a kiválasztott témákból, és ma nincs esedékes ismétlés. Holnap jönnek vissza a szavak.'))+
+    '</div>'+
+    '<div class="dgrid">'+
+      '<div class="dstat due"><div class="v">'+plan.due.length+'</div><div class="k">Esedékes ismétlés</div></div>'+
+      '<div class="dstat fresh"><div class="v">'+plan.fresh.length+'</div><div class="k">Mai új szó</div></div>'+
+      '<div class="dstat"><div class="v">'+sp.seen+' / '+total+'</div><div class="k">Elkezdett szó</div></div>'+
+      '<div class="dstat streak"><div class="v">'+(store.streak.count||0)+'</div><div class="k">Napos sorozat</div></div>'+
+    '</div>';
+  if(todo){
+    html += '<div class="fbrow" style="margin-top:20px"><button class="btn primary" id="dGo">Kezdjük — '+todo+' kérdés</button>'+
+      '<span class="hint" style="margin:0">A kérdés formáját és típusát a bal oldali beállítások adják.</span></div>';
+  }
+  html += '<div class="field" style="margin-top:22px"><span class="lbl">Napi új szó</span>'+
+    '<div class="seg" id="segNew" style="max-width:300px">'+
+      [5,10,15,25].map(function(n){ return '<button data-v="'+n+'"'+(store.settings.newPerDay===n?' aria-pressed="true"':"")+'>'+n+'</button>'; }).join("")+
+    '</div><p class="hint">Ma eddig '+store.day.fresh+' új szót kezdtél el. Az ismétlések ettől függetlenül mindig jönnek.</p></div>';
+  html += '</div>';
+
+  html += '<div class="panel" style="margin-top:16px"><h2 class="sec">Hol tartanak a szavak?</h2>'+
+    '<p class="hint" style="margin:0 0 4px">Minden helyes válasz feljebb lép egy dobozt, és egyre ritkábban kérdezem. A hibás válasz visszaesik.</p>'+
+    '<div class="boxes">';
+  var maxB = Math.max.apply(null, sp.boxes.concat([1]));
+  sp.boxes.forEach(function(n, i){
+    var h = Math.round(n / maxB * 100);
+    html += '<div class="b"><span>'+(n||"")+'</span><i style="height:'+h+'%;background:'+(i>=4?"var(--ok)":(i===0?"var(--bad)":"var(--accent)"))+'"></i></div>';
+  });
+  html += '</div><div class="boxlbl">'+
+    ['most','1 nap','3 nap','1 hét','2 hét','5 hét','3 hó'].map(function(l){ return '<span>'+l+'</span>'; }).join("")+
+    '</div>'+
+    '<p class="hint">Bebiztosítva (1 hétnél ritkább ismétlés): <b>'+mastered+'</b> szó.</p></div>';
+
+  document.getElementById("main").innerHTML = html;
+  var go = document.getElementById("dGo");
+  if(go) go.onclick = startDaily;
+  document.getElementById("segNew").querySelectorAll("button").forEach(function(b){
+    b.onclick = function(){ store.settings.newPerDay = +b.dataset.v; save(); renderDaily(); };
   });
   renderRail();
 }
@@ -1248,23 +1408,25 @@ function pickCard(side, id, el){
 
 /* ---------- router ---------- */
 function render(){
-  if(state.mode === "quiz") renderQuiz();
+  if(state.mode === "daily") renderDaily();
+  else if(state.mode === "quiz") renderQuiz();
   else if(state.mode === "cards") renderCards();
   else if(state.mode === "vocab") renderVocab();
   else if(state.mode === "vtest") renderVTest();
   else if(state.mode === "notes") renderNotes();
   else renderStats();
-  document.getElementById("setup").style.display = state.mode === "quiz" ? "" : "none";
+  document.getElementById("setup").style.display = (state.mode === "quiz" || state.mode === "daily") ? "" : "none";
   renderRail();
 }
 document.getElementById("nav").querySelectorAll("button").forEach(function(b){
   b.onclick = function(){
     state.mode = b.dataset.mode;
-    if(state.mode === "quiz" && !state.queue.length) newRound(false);
-    else { if(state.mode === "cards") state.board = null; render(); }
+    if(state.mode === "quiz"){ state.dailyRun = false; newRound(false); return; }
+    if(state.mode === "cards") state.board = null;
+    render();
   };
 });
-document.getElementById("restart").onclick = function(){ state.onlyHard = false; newRound(false); };
+document.getElementById("restart").onclick = function(){ state.onlyHard = false; state.dailyRun = false; newRound(false); };
 
 document.addEventListener("keydown", function(ev){
   if(state.mode === "vtest"){
@@ -1288,7 +1450,10 @@ document.addEventListener("keydown", function(ev){
 });
 
 document.getElementById("brandsub").textContent = "Lecture notes · " + ENTRIES.length + " szócikk · 5 témakör";
-newRound(false);
+rollDay();
+newRound(true);
+state.mode = "daily";
+render();
 })();
 </script>
 

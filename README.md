@@ -2,6 +2,7 @@
 
 Gyakorlóoldal az üzleti angol jegyzet (Topic 1–5) szószedetéből és tananyagszövegéből.
 
+- **Mai adag** – időzített ismétlés (Leitner-dobozok): minden helyes válasz ritkítja, minden hibás sűríti a szó visszatérését (10 perc → 1 → 3 → 7 → 16 → 35 → 90 nap). Napi új szó keret és sorozatszámláló.
 - **Gyakorlás** – kiegészítős és feleletválasztós kérdések a szótári példamondatokból, a definíciókból és a magyar jelentésekből; `i` gombbal magyar tipp.
 - **Szókincs kártyák** – párosítós játék: angol szó ↔ angol leírás, vagy angol szó ↔ magyar jelentés, 4–30 párig.
 - **Szókincs** – mind a 479 szócikk (kiejtés, szófaj, definíció, kollokációk, példamondat), magyar fordítással az `i` gomb mögött.
