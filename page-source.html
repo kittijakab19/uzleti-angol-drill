@@ -120,6 +120,7 @@ h1,h2,h3{margin:0;text-wrap:balance}
 .stem .blank{display:inline-block;min-width:90px;border-bottom:2.5px solid var(--accent);vertical-align:baseline;margin:0 3px}
 .stem .fill{font-weight:700;color:var(--ok);border-bottom:2px solid var(--ok)}
 .stem .fill.no{color:var(--bad);border-bottom-color:var(--bad)}
+.stem .fill.skip{color:var(--accent-ink);border-bottom-color:var(--accent)}
 .stem em{font-style:italic;color:var(--ink-2)}
 
 .opts{display:grid;gap:8px;margin-top:22px}
@@ -128,6 +129,8 @@ h1,h2,h3{margin:0;text-wrap:balance}
 .opt:disabled{cursor:default}
 .opt .k{font-family:var(--mono);font-size:12.5px;color:var(--ink-3);padding-top:2px;flex:none;width:15px}
 .opt .v{font-family:var(--display);font-weight:600}
+.opt.skip{border-color:var(--accent);background:var(--accent-soft)}
+.opt.skip .k,.opt.skip .v{color:var(--accent-ink)}
 .opt.right{border-color:var(--ok);background:var(--ok-soft)}
 .opt.right .k,.opt.right .v{color:var(--ok)}
 .opt.wrong{border-color:var(--bad);background:var(--bad-soft)}
@@ -154,6 +157,7 @@ h1,h2,h3{margin:0;text-wrap:balance}
 .fb{margin-top:20px;border-top:1px solid var(--line);padding-top:16px;display:grid;gap:12px}
 .verdict{display:flex;align-items:center;gap:9px;font-weight:700;font-size:15px}
 .verdict.ok{color:var(--ok)} .verdict.no{color:var(--bad)}
+.verdict.skip{color:var(--accent-ink)}
 .verdict .mark{width:21px;height:21px;border-radius:50%;display:grid;place-items:center;font-size:12px;font-weight:700;background:currentColor;flex:none}
 .verdict .mark span{color:var(--surface);line-height:1}
 .entry{display:grid;gap:7px;background:var(--surface-2);border-radius:var(--r);padding:14px 16px}
@@ -548,8 +552,8 @@ function stemHTML(q, revealed, typed){
   if(q.src === "gap"){
     var slot;
     if(revealed){
-      var good = revealed === "ok";
-      slot = '<span class="fill'+(good?"":" no")+'">'+esc(e.sf)+'</span>';
+      var cls = revealed === "ok" ? "" : (revealed === "skip" ? " skip" : " no");
+      slot = '<span class="fill'+cls+'">'+esc(e.sf)+'</span>';
     } else {
       var w = Math.min(260, Math.max(90, e.sf.length * 10));
       slot = '<span class="blank" style="width:' + w + 'px">&nbsp;</span>';
@@ -616,6 +620,7 @@ function renderQuiz(){
     (q.src === "gap" ? '<p class="gapinfo">A hiányzó rész: '+wordInfo(q.e.sf)+'</p>' : "")+
     '<div id="hint">'+(q.hinted ? hintHTML(q) : "")+'</div>';
   if(q.kind === "mc"){
+    html += '<div class="fbrow" style="justify-content:flex-end;margin-top:18px"><button class="btn ghost" id="skipBtn">Ugrás — nem tudom</button></div>';
     html += '<div class="opts" id="opts">';
     q.opts.forEach(function(o,ix){
       html += '<button class="opt" data-ix="'+ix+'"><span class="k">'+"abcd".charAt(ix)+')</span><span class="v">'+esc(o.t)+'</span></button>';
@@ -623,7 +628,8 @@ function renderQuiz(){
     html += '</div>';
   } else {
     html += '<div class="answer"><input id="typed" autocomplete="off" autocapitalize="off" spellcheck="false" placeholder="'+
-      (q.src==="hu" ? "az angol kifejezés…" : "a hiányzó szó…")+'"><button class="btn primary" id="checkBtn">Ellenőrzés</button></div>'+
+      (q.src==="hu" ? "az angol kifejezés…" : "a hiányzó szó…")+'"><button class="btn primary" id="checkBtn">Ellenőrzés</button>'+
+      '<button class="btn ghost" id="skipBtn">Ugrás — nem tudom</button></div>'+
       '<p class="hint">Az írásjelek és a kis-nagybetű nem számít; egy-két betűs elírást még elfogad.</p>';
   }
   html += '<div id="fb"></div></div>';
@@ -638,6 +644,8 @@ function renderQuiz(){
     if(!open && !q.hinted){ q.hinted = true; state.hints++; }
   };
   if(hb && q.hinted) hb.setAttribute("aria-expanded", "true");
+  var sk = document.getElementById("skipBtn");
+  if(sk) sk.onclick = skipQ;
   if(q.kind === "mc"){
     document.getElementById("opts").querySelectorAll(".opt").forEach(function(b){
       b.onclick = function(){ answerMC(+b.dataset.ix); };
@@ -652,11 +660,13 @@ function renderQuiz(){
 }
 function feedback(verdict, note){
   var q = state.queue[state.i], e = q.e;
-  document.getElementById("stem").innerHTML = stemHTML(q, verdict === "no" ? "no" : "ok");
+  document.getElementById("stem").innerHTML = stemHTML(q, verdict === "no" ? "no" : (verdict === "skip" ? "skip" : "ok"));
   var last = state.i === state.queue.length - 1;
-  var head = verdict === "no"
-    ? '<div class="verdict no"><span class="mark"><span>✕</span></span> Nem talált</div>'
-    : '<div class="verdict ok"><span class="mark"><span>✓</span></span> '+(verdict === "typo" ? "Majdnem — apró elírással" : "Helyes")+'</div>';
+  var head = verdict === "skip"
+    ? '<div class="verdict skip"><span class="mark"><span>→</span></span> Kihagyva — a helyes válasz:</div>'
+    : (verdict === "no"
+      ? '<div class="verdict no"><span class="mark"><span>✕</span></span> Nem talált</div>'
+      : '<div class="verdict ok"><span class="mark"><span>✓</span></span> '+(verdict === "typo" ? "Majdnem — apró elírással" : "Helyes")+'</div>');
   document.getElementById("fb").innerHTML = '<div class="fb">'+head+
     (note ? '<div class="def" style="color:var(--ink-2);font-size:14px">'+note+'</div>' : "")+
     entryCard(e)+
@@ -690,10 +700,31 @@ function answerOpen(){
     : (v === "no" ? "A te válaszod: <b>"+esc(txt)+"</b>" : "");
   finish(v !== "no", v, note);
 }
+function skipQ(){
+  if(state.answered) return;
+  var q = state.queue[state.i];
+  state.answered = true;
+  if(q.kind === "mc"){
+    document.getElementById("opts").querySelectorAll(".opt").forEach(function(b, i){
+      b.disabled = true;
+      if(q.opts[i].ok) b.classList.add("skip");
+    });
+  } else {
+    var inp = document.getElementById("typed");
+    if(inp) inp.disabled = true;
+    var cb = document.getElementById("checkBtn");
+    if(cb) cb.disabled = true;
+  }
+  var sk = document.getElementById("skipBtn");
+  if(sk) sk.disabled = true;
+  finish(false, "skip", "A helyes válasz: <b>"+esc(q.src === "gap" ? q.e.sf : baseTerm(q.e))+"</b>.");
+}
 function finish(good, verdict, note){
   var q = state.queue[state.i];
   record(q.e.id, good);
   if(good) state.correct++; else state.wrong.push(q.e);
+  var tal = document.querySelector(".tally");
+  if(tal) tal.innerHTML = '<span class="g">'+state.correct+' ✓</span> &nbsp;<span class="r">'+state.wrong.length+' ✗</span>';
   feedback(verdict, note);
   renderRail();
 }
@@ -901,12 +932,14 @@ function renderVTest(){
     '<p class="gapinfo">'+(hu2en ? ("A keresett kifejezés: " + wordInfo(baseTerm(e))) : "A magyar megfelelőt írd be; több jó válasz is lehet.")+'</p>'+
     '<div id="vtHintBox"></div>'+
     '<div class="answer"><input id="vtIn" autocomplete="off" autocapitalize="off" spellcheck="false" placeholder="'+
-      (hu2en ? "az angol kifejezés…" : "a magyar jelentés…")+'"><button class="btn primary" id="vtCheck">Ellenőrzés</button></div>'+
+      (hu2en ? "az angol kifejezés…" : "a magyar jelentés…")+'"><button class="btn primary" id="vtCheck">Ellenőrzés</button>'+
+      '<button class="btn ghost" id="vtSkip">Ugrás — nem tudom</button></div>'+
     '<p class="hint">Az írásjelek, a kis-nagybetű'+(hu2en ? "" : " és az ékezetek")+' nem számítanak; egy-két betűs elírást még elfogad.</p>'+
     '<div id="vtFb"></div></div>';
   document.getElementById("main").innerHTML = html;
   var inp = document.getElementById("vtIn");
   document.getElementById("vtCheck").onclick = vtAnswer;
+  document.getElementById("vtSkip").onclick = vtSkip;
   inp.addEventListener("keydown", function(ev){ if(ev.key === "Enter"){ ev.preventDefault(); v.answered ? vtNext() : vtAnswer(); } });
   inp.focus();
   var hb = document.getElementById("vtHint"), hbox = document.getElementById("vtHintBox");
@@ -919,28 +952,36 @@ function renderVTest(){
   };
   renderRail();
 }
-function vtAnswer(){
+function vtSkip(){ vtAnswer(true); }
+function vtAnswer(skipped){
   var v = state.vt; if(v.answered) return;
   var e = v.queue[v.i], hu2en = state.vtDir === "hu2en";
   var inp = document.getElementById("vtIn"), txt = inp.value.trim();
-  if(!txt){ inp.focus(); return; }
-  var res = hu2en ? checkTyped(txt, e) : checkTypedHu(txt, e);
+  if(!skipped && !txt){ inp.focus(); return; }
+  var res = skipped === true ? "skip" : (hu2en ? checkTyped(txt, e) : checkTypedHu(txt, e));
   v.answered = true; inp.disabled = true;
   document.getElementById("vtCheck").disabled = true;
-  var good = res !== "no";
+  document.getElementById("vtSkip").disabled = true;
+  var good = res === "yes" || res === "typo";
   record(e.id, good);
   if(good) v.correct++; else v.wrong.push(e);
-  var head = !good
-    ? '<div class="verdict no"><span class="mark"><span>✕</span></span> Nem talált</div>'
-    : '<div class="verdict ok"><span class="mark"><span>✓</span></span> '+(res === "typo" ? "Majdnem — apró elírással" : "Helyes")+'</div>';
-  var note = good && res === "yes" ? "" :
-    'A te válaszod: <b>'+esc(txt)+'</b> — helyesen: <b>'+esc(hu2en ? baseTerm(e) : e.hu)+'</b>.';
+  var head = res === "skip"
+    ? '<div class="verdict skip"><span class="mark"><span>→</span></span> Kihagyva — a helyes válasz:</div>'
+    : (!good
+      ? '<div class="verdict no"><span class="mark"><span>✕</span></span> Nem talált</div>'
+      : '<div class="verdict ok"><span class="mark"><span>✓</span></span> '+(res === "typo" ? "Majdnem — apró elírással" : "Helyes")+'</div>');
+  var note = res === "skip"
+    ? 'A helyes válasz: <b>'+esc(hu2en ? baseTerm(e) : e.hu)+'</b>.'
+    : (good && res === "yes" ? "" :
+      'A te válaszod: <b>'+esc(txt)+'</b> — helyesen: <b>'+esc(hu2en ? baseTerm(e) : e.hu)+'</b>.');
   var last = v.i === v.queue.length - 1;
   document.getElementById("vtFb").innerHTML = '<div class="fb">'+head+
     (note ? '<div class="def" style="color:var(--ink-2);font-size:14px">'+note+'</div>' : "")+
     entryCard(e)+
     '<div class="fbrow"><button class="btn primary" id="vtNext">'+(last ? "Eredmény" : "Következő")+'</button>'+
     '<span class="kbd">Enter</span></div></div>';
+  var tal2 = document.querySelector(".tally");
+  if(tal2) tal2.innerHTML = '<span class="g">'+v.correct+' ✓</span> &nbsp;<span class="r">'+v.wrong.length+' ✗</span>';
   document.getElementById("vtNext").onclick = vtNext;
   document.getElementById("vtNext").focus();
   wirePops();
