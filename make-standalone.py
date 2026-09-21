@@ -11,6 +11,8 @@ def doc(body):
     return ('<!DOCTYPE html>\n<html lang="hu">\n<head>\n'
             '<meta charset="utf-8">\n'
             '<meta name="viewport" content="width=device-width, initial-scale=1">\n'
+            '<meta name="robots" content="noindex, nofollow, noarchive, nosnippet">\n'
+            '<meta name="googlebot" content="noindex, nofollow">\n'
             '<style>html{color-scheme:light dark}img{max-width:100%}[hidden]{display:none!important}</style>\n'
             + head_extra + '</head>\n<body>\n' + body + '\n</body>\n</html>\n')
 

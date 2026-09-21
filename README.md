@@ -20,6 +20,10 @@ python3 serve.py       # http://localhost:8931/index.html, telefonról is a hely
 
 Vagy nyisd meg dupla kattintással az `uzleti-angol-drill.html` fájlt – abban minden adat benne van, internet nélkül is működik.
 
+## Keresők
+
+Minden oldal `<meta name="robots" content="noindex, nofollow, noarchive, nosnippet">` fejlécet kap, így a Google és a többi kereső nem indexeli. A `robots.txt` szándékosan engedi a bejárást, különben a keresők nem látnák magát a noindex utasítást.
+
 ## Fájlok
 
 | fájl | mit tartalmaz |

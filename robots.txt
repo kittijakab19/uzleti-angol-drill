@@ -1,0 +1,5 @@
+# A keresőknek be kell tudniuk olvasni az oldalt ahhoz, hogy lássák a
+# <meta name="robots" content="noindex"> utasítást, ezért a bejárás engedett,
+# az indexelést viszont minden oldal maga tiltja.
+User-agent: *
+Allow: /
