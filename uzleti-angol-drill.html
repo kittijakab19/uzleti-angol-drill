@@ -377,7 +377,7 @@ try{ var raw = localStorage.getItem(LS); if(raw){ var p = JSON.parse(raw);
 } }catch(e){}
 function save(){ try{ localStorage.setItem(LS, JSON.stringify(store)); }catch(e){} }
 
-var state = { mode:"quiz", queue:[], i:0, answered:false, correct:0, wrong:[], done:false, onlyHard:false, query:"", sort:"az", hints:0, notesTopic:0, notesAllHu:false, cardMode:"def", cardN:6, board:null };
+var state = { mode:"quiz", queue:[], i:0, answered:false, correct:0, wrong:[], done:false, onlyHard:false, query:"", sort:"az", hints:0, notesTopic:0, notesAllHu:false, cardMode:"def", cardN:6, board:null, vt:null, vtDir:"hu2en", vtN:20 };
 
 /* ---------- helpers ---------- */
 function esc(s){ return String(s).replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;").replace(/"/g,"&quot;"); }
@@ -414,6 +414,31 @@ function wordInfo(s){
   var words = String(s).trim().split(/[\s\-]+/).filter(Boolean).length;
   var letters = String(s).replace(/[^A-Za-z]/g, "").length;
   return words + (words > 1 ? " szó" : " szó") + " · " + letters + " betű";
+}
+function deacc(s){
+  return String(s).normalize ? String(s).normalize("NFD").replace(/[\u0300-\u036f]/g, "") : String(s);
+}
+function normHu(s){
+  return deacc(String(s).toLowerCase()).replace(/[^a-z0-9 ]/g, " ").replace(/\s+/g, " ").trim();
+}
+function huVariants(e){
+  var out = [];
+  String(e.hu).split(/[,;]/).forEach(function(part){
+    part = part.trim(); if(!part) return;
+    out.push(part);
+    var noPar = part.replace(/\([^)]*\)/g, " ").replace(/\s+/g, " ").trim();
+    if(noPar && noPar !== part) out.push(noPar);
+    var m = /\(([^)]+)\)/.exec(part);
+    if(m) out.push(m[1].trim());
+  });
+  return out;
+}
+function checkTypedHu(txt, e){
+  var g = normHu(txt); if(!g) return "no";
+  var vs = huVariants(e).map(normHu).filter(Boolean);
+  for(var i = 0; i < vs.length; i++){ if(vs[i] === g) return "yes"; }
+  for(var k = 0; k < vs.length; k++){ if(vs[k].length >= 6 && lev(vs[k], g) <= 1) return "typo"; }
+  return "no";
 }
 function stat(id){ return store.stats[id] || {ok:0,bad:0}; }
 function record(id, good){
@@ -500,8 +525,9 @@ function renderRail(){
   document.getElementById("navn").textContent = TOPICS.length + " téma";
   var practiced = Object.keys(store.stats).length;
   document.getElementById("navs").textContent = practiced ? practiced + " szó" : "";
+  var navMode = state.mode === "vtest" ? "vocab" : state.mode;
   document.getElementById("nav").querySelectorAll("button").forEach(function(b){
-    b.setAttribute("aria-current", String(b.dataset.mode === state.mode));
+    b.setAttribute("aria-current", String(b.dataset.mode === navMode));
   });
 }
 
@@ -743,7 +769,8 @@ function renderVocab(){
       '<button data-v="az"'+(state.sort==="az"?' aria-pressed="true"':"")+'>A–Z</button>'+
       '<button data-v="topic"'+(state.sort==="topic"?' aria-pressed="true"':"")+'>Téma</button>'+
       '<button data-v="hard"'+(state.sort==="hard"?' aria-pressed="true"':"")+'>Nehézség</button>'+
-    '</div><span class="vcount">'+list.length+' szócikk</span></div>';
+    '</div><button class="btn primary" id="startTest">Tesztelés</button>'+
+    '<span class="vcount">'+list.length+' szócikk</span></div>';
   if(!list.length) html += '<p class="empty">Nincs találat erre: <b>'+esc(q)+'</b></p>';
   html += '<div class="list">';
   list.forEach(function(e){
@@ -771,6 +798,10 @@ function renderVocab(){
   document.getElementById("segSort").querySelectorAll("button").forEach(function(b){
     b.onclick = function(){ state.sort = b.dataset.v; renderVocab(); };
   });
+  document.getElementById("startTest").onclick = function(){
+    state.vtPool = list.slice();
+    state.vt = null; state.mode = "vtest"; render();
+  };
   wirePops();
   renderRail();
 }
@@ -827,6 +858,131 @@ function renderStats(){
       state.mode = "vocab"; state.query = e.term; render();
     };
   });
+  renderRail();
+}
+
+/* ---------- rendering: szókincs teszt ---------- */
+function vtStart(entries){
+  var n = state.vtN === 0 ? entries.length : Math.min(state.vtN, entries.length);
+  state.vt = { queue: shuffle(entries.slice()).slice(0, n), i:0, answered:false, correct:0, wrong:[], done:false };
+}
+function renderVTestSetup(){
+  var p = state.vtPool || [];
+  var html = '<div class="card" style="--topic:var(--accent)">'+
+    '<div class="meta"><span class="tag">szókincs teszt</span>'+
+    '<span class="tag kind">'+p.length+' szó a jelenlegi szűrésből</span></div>'+
+    '<div class="qlead">Melyik nyelven mutassam a szavakat?</div>'+
+    '<div class="stem" style="font-size:19px">Az egyik nyelven megkapod a szót, a másikon neked kell beírnod.</div>'+
+    '<div class="field" style="margin-top:20px"><span class="lbl">Irány</span>'+
+    '<div class="seg" id="vtDir" style="max-width:520px">'+
+      '<button data-v="hu2en"'+(state.vtDir==="hu2en"?' aria-pressed="true"':"")+'>Magyarul mutatom → angolul írom</button>'+
+      '<button data-v="en2hu"'+(state.vtDir==="en2hu"?' aria-pressed="true"':"")+'>Angolul mutatom → magyarul írom</button>'+
+    '</div></div>'+
+    '<div class="field"><span class="lbl">Hány szó</span><div class="seg" id="vtN" style="max-width:320px">'+
+      [10,20,40,0].map(function(n){ return '<button data-v="'+n+'"'+(state.vtN===n?' aria-pressed="true"':"")+'>'+(n===0?"mind":n)+'</button>'; }).join("")+
+    '</div></div>'+
+    '<div class="fbrow" style="margin-top:22px"><button class="btn primary" id="vtGo">Teszt indítása</button>'+
+    '<button class="btn ghost" id="vtBack">Vissza a szókincshez</button></div></div>';
+  document.getElementById("main").innerHTML = html;
+  document.getElementById("vtDir").querySelectorAll("button").forEach(function(b){
+    b.onclick = function(){ state.vtDir = b.dataset.v; renderVTestSetup(); };
+  });
+  document.getElementById("vtN").querySelectorAll("button").forEach(function(b){
+    b.onclick = function(){ state.vtN = +b.dataset.v; renderVTestSetup(); };
+  });
+  document.getElementById("vtGo").onclick = function(){ vtStart(state.vtPool || []); render(); };
+  document.getElementById("vtBack").onclick = function(){ state.mode = "vocab"; state.vt = null; render(); };
+  renderRail();
+}
+function renderVTest(){
+  if(!state.vtPool || !state.vtPool.length){ state.mode = "vocab"; render(); return; }
+  if(!state.vt) return renderVTestSetup();
+  var v = state.vt;
+  if(v.done) return renderVTestResult();
+  var e = v.queue[v.i], hu2en = state.vtDir === "hu2en";
+  var pct = Math.round(v.i / v.queue.length * 100);
+  var html = '<div class="bar"><span class="count">'+(v.i+1)+' / '+v.queue.length+'</span>'+
+    '<span class="track"><i style="width:'+pct+'%"></i></span>'+
+    '<span class="tally"><span class="g">'+v.correct+' ✓</span> &nbsp;<span class="r">'+v.wrong.length+' ✗</span></span></div>';
+  html += '<div class="card" style="--topic:'+HUE[e.topic]+'">'+
+    '<div class="meta"><span class="tag topic">'+esc(TNAME[e.topic])+'</span>'+
+    '<span class="tag kind">'+(hu2en ? "magyar → angol" : "angol → magyar")+'</span>'+
+    '<button class="ibtn" id="vtHint" aria-expanded="false" title="Tipp"><i>i</i>tipp</button></div>'+
+    '<div class="qlead">'+(hu2en ? "Írd be angolul" : "Írd be magyarul")+'</div>'+
+    '<div class="stem" id="vtStem">'+(hu2en ? esc(e.hu) : esc(e.term)+' <span class="ipa" style="font-family:var(--mono);font-size:14px;color:var(--ink-3)">/'+esc(e.ipa)+'/</span>')+'</div>'+
+    '<p class="gapinfo">'+(hu2en ? ("A keresett kifejezés: " + wordInfo(baseTerm(e))) : "A magyar megfelelőt írd be; több jó válasz is lehet.")+'</p>'+
+    '<div id="vtHintBox"></div>'+
+    '<div class="answer"><input id="vtIn" autocomplete="off" autocapitalize="off" spellcheck="false" placeholder="'+
+      (hu2en ? "az angol kifejezés…" : "a magyar jelentés…")+'"><button class="btn primary" id="vtCheck">Ellenőrzés</button></div>'+
+    '<p class="hint">Az írásjelek, a kis-nagybetű'+(hu2en ? "" : " és az ékezetek")+' nem számítanak; egy-két betűs elírást még elfogad.</p>'+
+    '<div id="vtFb"></div></div>';
+  document.getElementById("main").innerHTML = html;
+  var inp = document.getElementById("vtIn");
+  document.getElementById("vtCheck").onclick = vtAnswer;
+  inp.addEventListener("keydown", function(ev){ if(ev.key === "Enter"){ ev.preventDefault(); v.answered ? vtNext() : vtAnswer(); } });
+  inp.focus();
+  var hb = document.getElementById("vtHint"), hbox = document.getElementById("vtHintBox");
+  hb.onclick = function(){
+    var open = hbox.innerHTML !== "";
+    hbox.innerHTML = open ? "" : '<div class="hintbox"><span class="k">tipp</span>'+
+      '<span class="d"><i>'+esc(e.pos)+'</i> — '+esc(e.def)+'</span>'+
+      '<span class="d">Kezdőbetű: <b>'+esc((hu2en ? baseTerm(e) : e.hu).charAt(0).toUpperCase())+'</b> · '+wordInfo(hu2en ? baseTerm(e) : e.hu)+'</span></div>';
+    hb.setAttribute("aria-expanded", String(!open));
+  };
+  renderRail();
+}
+function vtAnswer(){
+  var v = state.vt; if(v.answered) return;
+  var e = v.queue[v.i], hu2en = state.vtDir === "hu2en";
+  var inp = document.getElementById("vtIn"), txt = inp.value.trim();
+  if(!txt){ inp.focus(); return; }
+  var res = hu2en ? checkTyped(txt, e) : checkTypedHu(txt, e);
+  v.answered = true; inp.disabled = true;
+  document.getElementById("vtCheck").disabled = true;
+  var good = res !== "no";
+  record(e.id, good);
+  if(good) v.correct++; else v.wrong.push(e);
+  var head = !good
+    ? '<div class="verdict no"><span class="mark"><span>✕</span></span> Nem talált</div>'
+    : '<div class="verdict ok"><span class="mark"><span>✓</span></span> '+(res === "typo" ? "Majdnem — apró elírással" : "Helyes")+'</div>';
+  var note = good && res === "yes" ? "" :
+    'A te válaszod: <b>'+esc(txt)+'</b> — helyesen: <b>'+esc(hu2en ? baseTerm(e) : e.hu)+'</b>.';
+  var last = v.i === v.queue.length - 1;
+  document.getElementById("vtFb").innerHTML = '<div class="fb">'+head+
+    (note ? '<div class="def" style="color:var(--ink-2);font-size:14px">'+note+'</div>' : "")+
+    entryCard(e)+
+    '<div class="fbrow"><button class="btn primary" id="vtNext">'+(last ? "Eredmény" : "Következő")+'</button>'+
+    '<span class="kbd">Enter</span></div></div>';
+  document.getElementById("vtNext").onclick = vtNext;
+  document.getElementById("vtNext").focus();
+  wirePops();
+}
+function vtNext(){
+  var v = state.vt;
+  if(v.i >= v.queue.length - 1){ v.done = true; render(); return; }
+  v.i++; v.answered = false; render();
+}
+function renderVTestResult(){
+  var v = state.vt, total = v.queue.length, pc = Math.round(v.correct/total*100);
+  var html = '<div class="card" style="--topic:var(--accent)">'+
+    '<div class="meta"><span class="tag">szókincs teszt</span>'+
+    '<span class="tag kind">'+(state.vtDir === "hu2en" ? "magyar → angol" : "angol → magyar")+'</span></div>'+
+    '<div class="qlead">Teszt vége</div>'+
+    '<div class="score"><span class="big">'+v.correct+'</span><span class="of">/ '+total+' &nbsp;·&nbsp; '+pc+'%</span></div>';
+  if(v.wrong.length){
+    html += '<h2 class="sec" style="margin-top:22px">Amik kiestek</h2><div class="misses">';
+    v.wrong.forEach(function(e){ html += '<div class="miss"><b>'+esc(e.term)+'</b><span>'+esc(e.hu)+'</span></div>'; });
+    html += '</div>';
+  }
+  html += '<div class="fbrow" style="margin-top:22px">'+
+    '<button class="btn primary" id="vtAgain">Új teszt</button>'+
+    (v.wrong.length ? '<button class="btn" id="vtRetry">Csak a kiesettekkel</button>' : "")+
+    '<button class="btn ghost" id="vtBack2">Vissza a szókincshez</button></div></div>';
+  document.getElementById("main").innerHTML = html;
+  document.getElementById("vtAgain").onclick = function(){ state.vt = null; render(); };
+  var r = document.getElementById("vtRetry");
+  if(r) r.onclick = function(){ vtStart(v.wrong.slice()); render(); };
+  document.getElementById("vtBack2").onclick = function(){ state.mode = "vocab"; state.vt = null; render(); };
   renderRail();
 }
 
@@ -1001,6 +1157,7 @@ function render(){
   if(state.mode === "quiz") renderQuiz();
   else if(state.mode === "cards") renderCards();
   else if(state.mode === "vocab") renderVocab();
+  else if(state.mode === "vtest") renderVTest();
   else if(state.mode === "notes") renderNotes();
   else renderStats();
   document.getElementById("setup").style.display = state.mode === "quiz" ? "" : "none";
@@ -1016,6 +1173,14 @@ document.getElementById("nav").querySelectorAll("button").forEach(function(b){
 document.getElementById("restart").onclick = function(){ state.onlyHard = false; newRound(false); };
 
 document.addEventListener("keydown", function(ev){
+  if(state.mode === "vtest"){
+    var v = state.vt;
+    if(ev.key === "Enter" && v && !v.done){
+      ev.preventDefault();
+      if(v.answered) vtNext(); else vtAnswer();
+    }
+    return;
+  }
   if(state.mode !== "quiz" || state.done) return;
   var tag = (ev.target.tagName || "").toLowerCase();
   var q = state.queue[state.i];

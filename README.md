@@ -5,6 +5,7 @@ Gyakorlóoldal az üzleti angol jegyzet (Topic 1–5) szószedetéből és tanan
 - **Gyakorlás** – kiegészítős és feleletválasztós kérdések a szótári példamondatokból, a definíciókból és a magyar jelentésekből; `i` gombbal magyar tipp.
 - **Szókincs kártyák** – párosítós játék: angol szó ↔ angol leírás, vagy angol szó ↔ magyar jelentés, 4–30 párig.
 - **Szókincs** – mind a 479 szócikk (kiejtés, szófaj, definíció, kollokációk, példamondat), magyar fordítással az `i` gomb mögött.
+- **Szókincs → Tesztelés** – beírós teszt a szűrt szólistából, választható iránnyal: magyar jelentésből angol szó, vagy angol szóból magyar jelentés.
 - **Leírások** – a jegyzet teljes szövege témakörönként, bekezdésenként előhívható magyar fordítással.
 - **Haladás** – találati arány, témakörönkénti bontás, nehéz szavak külön gyakorlása. Az eredmény a böngésződben tárolódik.
 
