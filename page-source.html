@@ -190,6 +190,27 @@ h1,h2,h3{margin:0;text-wrap:balance}
 .miss b{font-family:var(--display);font-weight:700}
 .miss span{color:var(--ink-2);text-align:right}
 
+/* ---------- word list ---------- */
+.wlist{border:1px solid var(--line);border-radius:var(--r);overflow:hidden;background:var(--surface);box-shadow:var(--shadow-sm)}
+.wrow{display:grid;grid-template-columns:minmax(200px,1fr) minmax(200px,1.15fr);gap:18px;align-items:baseline;
+  width:100%;text-align:left;background:none;border:0;border-bottom:1px solid var(--line);padding:9px 16px;cursor:pointer}
+.wrow:last-child{border-bottom:0}
+.wrow:nth-child(even){background:var(--surface-2)}
+.wrow:hover{background:var(--accent-soft)}
+.wrow .en{font-family:var(--display);font-weight:700;font-size:15.5px;color:var(--ink);display:flex;align-items:baseline;gap:8px}
+.wrow .en i{width:7px;height:7px;border-radius:50%;background:var(--topic);flex:none;position:relative;top:-2px}
+.wrow .hu{color:var(--ink-2);font-size:14.5px}
+.wrow .pos{font-style:italic;font-size:12px;color:var(--ink-3);margin-left:4px}
+.whead{display:grid;grid-template-columns:minmax(200px,1fr) minmax(200px,1.15fr);gap:18px;padding:8px 16px;
+  background:var(--surface-3);border-bottom:1px solid var(--line-2)}
+.whead span{font-family:var(--mono);font-size:10px;letter-spacing:.12em;text-transform:uppercase;color:var(--ink-3)}
+.wgroup{padding:11px 16px 7px;background:var(--surface-3);border-bottom:1px solid var(--line);
+  font-family:var(--mono);font-size:10.5px;letter-spacing:.1em;text-transform:uppercase;color:var(--topic)}
+@media (max-width:560px){
+  .wrow,.whead{grid-template-columns:1fr;gap:2px}
+  .whead span:last-child{display:none}
+}
+
 /* ---------- i-popover ---------- */
 .ih{position:relative;display:inline-flex;vertical-align:middle}
 .ih>button{width:19px;height:19px;padding:0;border-radius:50%;border:1px solid var(--line-2);background:var(--surface);color:var(--accent-ink);font-family:var(--display);font-weight:700;font-size:12px;line-height:1;cursor:pointer;display:grid;place-items:center}
@@ -369,7 +390,7 @@ try{ var raw = localStorage.getItem(LS); if(raw){ var p = JSON.parse(raw);
 } }catch(e){}
 function save(){ try{ localStorage.setItem(LS, JSON.stringify(store)); }catch(e){} }
 
-var state = { mode:"quiz", queue:[], i:0, answered:false, correct:0, wrong:[], done:false, onlyHard:false, query:"", sort:"az", hints:0, notesTopic:0, notesAllHu:false, cardMode:"def", cardN:6, board:null, vt:null, vtDir:"hu2en", vtN:20 };
+var state = { mode:"quiz", queue:[], i:0, answered:false, correct:0, wrong:[], done:false, onlyHard:false, query:"", sort:"az", vview:"cards", hints:0, notesTopic:0, notesAllHu:false, cardMode:"def", cardN:6, board:null, vt:null, vtDir:"hu2en", vtN:20 };
 
 /* ---------- helpers ---------- */
 function esc(s){ return String(s).replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;").replace(/"/g,"&quot;"); }
@@ -788,9 +809,35 @@ function renderVocab(){
       '<button data-v="az"'+(state.sort==="az"?' aria-pressed="true"':"")+'>A–Z</button>'+
       '<button data-v="topic"'+(state.sort==="topic"?' aria-pressed="true"':"")+'>Téma</button>'+
       '<button data-v="hard"'+(state.sort==="hard"?' aria-pressed="true"':"")+'>Nehézség</button>'+
-    '</div><button class="btn primary" id="startTest">Tesztelés</button>'+
+    '</div>'+
+    '<div class="seg" id="segView" style="flex:none;width:190px">'+
+      '<button data-v="cards"'+(state.vview==="cards"?' aria-pressed="true"':"")+'>Kártyák</button>'+
+      '<button data-v="list"'+(state.vview==="list"?' aria-pressed="true"':"")+'>Szólista</button>'+
+    '</div>'+
+    '<button class="btn primary" id="startTest">Tesztelés</button>'+
     '<span class="vcount">'+list.length+' szócikk</span></div>';
   if(!list.length) html += '<p class="empty">Nincs találat erre: <b>'+esc(q)+'</b></p>';
+  if(state.vview === "list"){
+    html += '<div class="wlist"><div class="whead"><span>angolul</span><span>magyarul</span></div>';
+    var lastTopic = null;
+    list.forEach(function(e){
+      if(state.sort === "topic" && e.topic !== lastTopic){
+        lastTopic = e.topic;
+        html += '<div class="wgroup" style="--topic:'+HUE[e.topic]+'">'+esc(TNAME[e.topic])+'</div>';
+      }
+      html += '<button class="wrow" data-term="'+esc(e.term)+'" style="--topic:'+HUE[e.topic]+'">'+
+        '<span class="en"><i></i><span>'+hi(e.term,q)+'<span class="pos">'+esc(e.pos)+'</span></span></span>'+
+        '<span class="hu">'+hi(e.hu,q)+'</span></button>';
+    });
+    html += '</div><p class="foot">'+list.length+' szó · kattints egy sorra a teljes szócikkért. Forrás: Lecture notes — Topic 1–5 szószedete.</p>';
+    document.getElementById("main").innerHTML = html;
+    wireVocabTools(list);
+    document.querySelectorAll(".wrow").forEach(function(b){
+      b.onclick = function(){ state.vview = "cards"; state.query = b.dataset.term; renderVocab(); };
+    });
+    renderRail();
+    return;
+  }
   html += '<div class="list">';
   list.forEach(function(e){
     var s = stat(e.id), sc = (s.ok||s.bad) ? (s.ok+" ✓ / "+s.bad+" ✗") : "";
@@ -807,22 +854,32 @@ function renderVocab(){
   });
   html += '</div><p class="foot">Forrás: Lecture notes — Topic 1–5 szószedete. A magyar megfelelők fordítások, nem szó szerinti szótári alakok.</p>';
   document.getElementById("main").innerHTML = html;
+  wireVocabTools(list);
+  wirePops();
+  renderRail();
+}
+
+function wireVocabTools(list){
   var inp = document.getElementById("q");
-  inp.addEventListener("input", function(){
+  if(inp) inp.addEventListener("input", function(){
     state.query = inp.value;
     var pos = inp.selectionStart;
     renderVocab();
-    var n = document.getElementById("q"); n.focus(); n.setSelectionRange(pos,pos);
+    var n = document.getElementById("q"); if(n){ n.focus(); n.setSelectionRange(pos,pos); }
   });
-  document.getElementById("segSort").querySelectorAll("button").forEach(function(b){
+  var so = document.getElementById("segSort");
+  if(so) so.querySelectorAll("button").forEach(function(b){
     b.onclick = function(){ state.sort = b.dataset.v; renderVocab(); };
   });
-  document.getElementById("startTest").onclick = function(){
+  var vw = document.getElementById("segView");
+  if(vw) vw.querySelectorAll("button").forEach(function(b){
+    b.onclick = function(){ state.vview = b.dataset.v; renderVocab(); };
+  });
+  var st = document.getElementById("startTest");
+  if(st) st.onclick = function(){
     state.vtPool = list.slice();
     state.vt = null; state.mode = "vtest"; render();
   };
-  wirePops();
-  renderRail();
 }
 
 /* ---------- rendering: progress ---------- */
