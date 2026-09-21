@@ -653,7 +653,7 @@ function renderQuiz(){
     (q.src === "gap" ? '<p class="gapinfo">A hiányzó rész: '+wordInfo(q.e.sf)+'</p>' : "")+
     '<div id="hint">'+(q.hinted ? hintHTML(q) : "")+'</div>';
   if(q.kind === "mc"){
-    html += '<div class="fbrow" style="justify-content:flex-end;margin-top:18px"><button class="btn ghost" id="skipBtn">Ugrás — nem tudom</button></div>';
+    html += '<div class="fbrow" style="justify-content:flex-end;margin-top:18px"><button class="btn ghost" id="skipBtn">Ugrás</button></div>';
     html += '<div class="opts" id="opts">';
     q.opts.forEach(function(o,ix){
       html += '<button class="opt" data-ix="'+ix+'"><span class="k">'+"abcd".charAt(ix)+')</span><span class="v">'+esc(o.t)+'</span></button>';
@@ -662,7 +662,7 @@ function renderQuiz(){
   } else {
     html += '<div class="answer"><input id="typed" autocomplete="off" autocapitalize="off" spellcheck="false" placeholder="'+
       (q.src==="hu" ? "az angol kifejezés…" : "a hiányzó szó…")+'"><button class="btn primary" id="checkBtn">Ellenőrzés</button>'+
-      '<button class="btn ghost" id="skipBtn">Ugrás — nem tudom</button></div>'+
+      '<button class="btn ghost" id="skipBtn">Ugrás</button></div>'+
       '<p class="hint">Az írásjelek és a kis-nagybetű nem számít; egy-két betűs elírást még elfogad.</p>';
   }
   html += '<div id="fb"></div></div>';
@@ -1002,7 +1002,7 @@ function renderVTest(){
     '<div id="vtHintBox"></div>'+
     '<div class="answer"><input id="vtIn" autocomplete="off" autocapitalize="off" spellcheck="false" placeholder="'+
       (hu2en ? "az angol kifejezés…" : "a magyar jelentés…")+'"><button class="btn primary" id="vtCheck">Ellenőrzés</button>'+
-      '<button class="btn ghost" id="vtSkip">Ugrás — nem tudom</button></div>'+
+      '<button class="btn ghost" id="vtSkip">Ugrás</button></div>'+
     '<p class="hint">Az írásjelek, a kis-nagybetű'+(hu2en ? "" : " és az ékezetek")+' nem számítanak; egy-két betűs elírást még elfogad.</p>'+
     '<div id="vtFb"></div></div>';
   document.getElementById("main").innerHTML = html;
